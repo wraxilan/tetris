@@ -3,7 +3,7 @@
 --
 
 function love.load()
-    love.graphics.setBackgroundColor(0.5, 0.5, 0.5)
+    --love.graphics.setBackgroundColor(0.5, 0.5, 0.5)
 
     board = love.graphics.newImage("assets/board.png")
     tile = love.graphics.newImage("assets/tile_1.png")
