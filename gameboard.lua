@@ -8,8 +8,6 @@ Tile.__index = Tile
 function Tile.create(name, blocks)
     local self = setmetatable({}, Tile)
 
-    print(blockSize)
-
     self.blocks = blocks
     self.blockSize = self.blocks[1]:getWidth()
     self.board = {}
@@ -22,11 +20,11 @@ function Tile.create(name, blocks)
     for str in string.gmatch(contents, '([^,^\n]+)') do
         if self.board[t] == nil then
             self.board[t] = {}
-        end 
+        end
         if self.board[t][y] == nil then
             self.board[t][y] = {}
         end
-        
+
         self.board[t][y][x] = tonumber(str)
 
         x = x + 1;
@@ -40,7 +38,7 @@ function Tile.create(name, blocks)
             t = t + 1
         end
     end
-    
+
     return self
 end
 
@@ -104,7 +102,7 @@ end
 
 function GameBoard:draw()
     love.graphics.draw(self.background, 0, 0)
-    
+
     love.graphics.translate(self.xOffset, self.yOffset)
     for y=0, 23 do
         for x=0, 9 do

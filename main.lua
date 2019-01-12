@@ -11,6 +11,8 @@ function love.load()
     boardX = math.floor((love.graphics.getWidth() - board.width) / 2)
     boardY = math.floor((love.graphics.getHeight() - board.height) / 2)
 
+    font = love.graphics.newFont("assets/azonix.otf", 18)
+
     -- board = love.graphics.newImage("assets/board.png")
     -- tile = love.graphics.newImage("assets/tile_1.png")
 end
@@ -31,6 +33,7 @@ function love.draw()
 
     ---------------------
 
+    love.graphics.setFont(font)
     love.graphics.print("debug: " .. boardX, 10, 680)
     love.graphics.print("FPS: " .. love.timer.getFPS(), 10, 700)
     love.graphics.print("dt: " .. love. timer.getDelta(), 10, 720)
