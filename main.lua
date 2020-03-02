@@ -20,6 +20,7 @@ end
 function love.draw()
     -- love.graphics.print('Hello World!', 400, 300)
 
+
     --love.graphics.draw(board, 340, 4)
     --for x=0, 9 do
     --    for y=0, 23 do
@@ -36,5 +37,17 @@ function love.draw()
     love.graphics.setFont(font)
     love.graphics.print("debug: " .. boardX, 10, 680)
     love.graphics.print("FPS: " .. love.timer.getFPS(), 10, 700)
-    love.graphics.print("dt: " .. love. timer.getDelta(), 10, 720)
+    love.graphics.print("dt: " .. love.timer.getDelta(), 10, 720)
+
+    ---------------------
+
+    if love.keyboard.isDown("escape") then
+        love.event.quit()
+    end
+    if love.keyboard.isDown("left") then
+        board:turn(-1)
+    end
+    if love.keyboard.isDown("right") then
+        board:turn(1)
+    end
 end

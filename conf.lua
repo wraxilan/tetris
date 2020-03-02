@@ -1,9 +1,9 @@
 function love.conf(t)
 	io.stdout:setvbuf("no")
-	author = "Jens Kieselbach"
-	love_version = "11.1"
+	author = "Jens Welsch"
+	love_version = "11.3"
 
-    t.window.title = "Tetris" 
+    t.window.title = "Tetris"
     t.window.width = 1024
     t.window.height = 768
 end

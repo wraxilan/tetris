@@ -1,31 +1,22 @@
 --
--- Tile
+-- Helper functions
 --
 
-Tile = {}
-Tile.__index = Tile
-
-function Tile.create(name, blocks)
-    local self = setmetatable({}, Tile)
-
-    self.blocks = blocks
-    self.blockSize = self.blocks[1]:getWidth()
-    self.board = {}
-    self.turn = 0
-
-    local contents, size = love.filesystem.read(name)
+function loadTileSet(filename) 
+    local tileset = {}
+    local contents, size = love.filesystem.read(filename)
     local t = 0
     local y = 0
     local x = 0
     for str in string.gmatch(contents, '([^,^\n]+)') do
-        if self.board[t] == nil then
-            self.board[t] = {}
+        if tileset[t] == nil then
+            tileset[t] = {}
         end
-        if self.board[t][y] == nil then
-            self.board[t][y] = {}
+        if tileset[t][y] == nil then
+            tileset[t][y] = {}
         end
 
-        self.board[t][y][x] = tonumber(str)
+        tileset[t][y][x] = tonumber(str)
 
         x = x + 1;
         if x > 3 then
@@ -38,6 +29,26 @@ function Tile.create(name, blocks)
             t = t + 1
         end
     end
+    return tileset
+end
+
+--
+-- Tile
+--
+
+Tile = {}
+Tile.__index = Tile
+
+function Tile.create(tiles, blocks)
+    local self = setmetatable({}, Tile)
+
+    self.tileset = tiles
+
+    self.blocks = blocks
+    self.blockSize = self.blocks[1]:getWidth()
+
+    self.tileIndex = 7
+    self.turnIndex = 0
 
     return self
 end
@@ -45,11 +56,20 @@ end
 function Tile:draw()
     for y=0, 3 do
         for x=0, 3 do
-            local i = self.board[self.turn][y][x]
+            local i = self.tileset[self.tileIndex][self.turnIndex][y][x]
             if i > 0 then
                 love.graphics.draw(self.blocks[i], x * self.blockSize, y * self.blockSize)
             end
         end
+    end
+end
+
+function Tile:turn(i)
+    self.turnIndex = self.turnIndex + 1
+    if self.turnIndex > 3 then
+        self.turnIndex = 0
+    elseif self.turnIndex < 0 then
+        self.turnIndex = 3
     end
 end
 
@@ -81,12 +101,18 @@ function GameBoard.create()
     self.blocks[7] = love.graphics.newImage("assets/block7.png")
     self.blockSize = self.blocks[1]:getWidth()
 
-    -- the tiles
-    self.tiles = {}
-    self.tiles[1] = Tile.create("assets/tile1.txt", self.blocks)
-    self.tiles[2] = Tile.create("assets/tile2.txt", self.blocks)
-    self.tiles[3] = Tile.create("assets/tile3.txt", self.blocks)
-    self.tiles[4] = Tile.create("assets/tile4.txt", self.blocks)
+    -- the tile sets
+    self.tileSets = {}
+    self.tileSets[1] = loadTileSet("assets/tile1.txt") 
+    self.tileSets[2] = loadTileSet("assets/tile2.txt") 
+    self.tileSets[3] = loadTileSet("assets/tile3.txt") 
+    self.tileSets[4] = loadTileSet("assets/tile4.txt") 
+    self.tileSets[5] = loadTileSet("assets/tile5.txt") 
+    self.tileSets[6] = loadTileSet("assets/tile6.txt") 
+    self.tileSets[7] = loadTileSet("assets/tile7.txt") 
+
+    -- the current tile
+    self.tile = Tile.create(self.tileSets, self.blocks)
 
     -- the board
     self.board = {}
@@ -113,7 +139,15 @@ function GameBoard:draw()
         end
     end
 
-    self.tiles[4]:draw()
+    if self.tile then
+        self.tile:draw()
+    end 
 
     love.graphics.translate(-self.xOffset, -self.yOffset)
+end
+
+function GameBoard:turn(i)
+    if self.tile then
+        self.tile:turn(i)
+    end 
 end
