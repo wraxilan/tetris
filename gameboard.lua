@@ -39,43 +39,115 @@ end
 Tile = {}
 Tile.__index = Tile
 
-function Tile.create(tiles, blocks)
+function Tile.create(tiles, blocks, brd, tindex)
     local self = setmetatable({}, Tile)
 
     self.tileset = tiles
-
     self.blocks = blocks
+    self.board = brd
+
     self.blockSize = self.blocks[1]:getWidth()
 
-    self.tileIndex = 7
+    self.tileIndex = tindex
     self.turnIndex = 0
+    self.xPos = 3
+    self.yPos = 1
+    self.offset = 0
+    self.aplha = 1
 
     return self
 end
 
 function Tile:draw()
+
+    love.graphics.setColor(1, 1, 1, self.alpha)
     for y=0, 3 do
         for x=0, 3 do
             local i = self.tileset[self.tileIndex][self.turnIndex][y][x]
             if i > 0 then
-                love.graphics.draw(self.blocks[i], x * self.blockSize, y * self.blockSize)
+                love.graphics.draw(self.blocks[i], (x + self.xPos) * self.blockSize, ((y + self.yPos) * self.blockSize) - self.offset)
             end
         end
     end
 end
 
-function Tile:turn(i)
-    self.turnIndex = self.turnIndex + 1
-    if self.turnIndex > 3 then
-        self.turnIndex = 0
-    elseif self.turnIndex < 0 then
-        self.turnIndex = 3
+function Tile:turn()
+    if self:check((self.turnIndex + 1) % 4, self.xPos, self.yPos) then
+        self.turnIndex = (self.turnIndex + 1) % 4
+    end 
+end
+
+function Tile:descend()
+    if self:check(self.turnIndex, self.xPos, self.yPos + 1) then
+        self.yPos = self.yPos + 1
+        return false
+    else
+        for y=0, 3 do
+            for x=0, 3 do
+                local i = self.tileset[self.tileIndex][self.turnIndex][y][x]
+                if i > 0 then
+                    self.board[self.yPos + y][self.xPos + x] = i
+                end
+            end
+        end
+        return true
+    end 
+end
+
+function Tile:move(i, multiple)
+    if multiple then 
+        local x = self.xPos + i
+        while self:check(self.turnIndex, x, self.yPos) do
+            self.xPos = x
+            x = x + i
+        end 
+    else 
+        if self:check(self.turnIndex, self.xPos + i, self.yPos) then
+            self.xPos = self.xPos + i
+        end 
     end
+end
+
+function Tile:check(turnindex, xpos, ypos)
+    for y=0, 3 do
+        for x=0, 3 do
+            local i = self.tileset[self.tileIndex][turnindex][y][x]
+            if i > 0 then
+                local checkx = x + xpos
+                local checky = y + ypos
+                if checkx < 0 or checkx > 9 then
+                    return false
+                end
+                if checky > 23 then
+                    return false
+                end
+                if self.board[ypos + y][xpos + x] > 0 then
+                    return false
+                end
+            end
+        end
+    end
+    return true
+end
+
+function Tile:setPhase(p)
+    self.offset = self.blockSize - p * self.blockSize
+end
+
+function Tile:setAlpha(a)
+    self.alpha = a
+end
+
+function Tile:getAlpha()
+    return self.alpha
 end
 
 --
 -- GameBoard
 --
+
+STATE__RUNNING = 1
+STATE__DROPPING_IN = 2
 
 GameBoard = {}
 GameBoard.__index = GameBoard
@@ -111,8 +183,15 @@ function GameBoard.create()
     self.tileSets[6] = loadTileSet("assets/tile6.txt") 
     self.tileSets[7] = loadTileSet("assets/tile7.txt") 
 
+    -- the current statte
+    self.state = STATE__RUNNING
+
     -- the current tile
-    self.tile = Tile.create(self.tileSets, self.blocks)
+    self.tile = nil
+
+    -- tempo in s
+    self.tempo = 0.15
+    self.delta = 0
 
     -- the board
     self.board = {}
@@ -130,6 +209,8 @@ function GameBoard:draw()
     love.graphics.draw(self.background, 0, 0)
 
     love.graphics.translate(self.xOffset, self.yOffset)
+
+    love.graphics.setColor(1, 1, 1, 1)
     for y=0, 23 do
         for x=0, 9 do
             local i = self.board[y][x]
@@ -139,15 +220,112 @@ function GameBoard:draw()
         end
     end
 
-    if self.tile then
-        self.tile:draw()
-    end 
+    self.delta = self.delta + love.timer.getDelta()
+
+    if self.state == STATE__RUNNING  then
+        self:running()
+    elseif self.state == STATE__DROPPING_IN  then
+        self:droppingIn()
+    end
 
     love.graphics.translate(-self.xOffset, -self.yOffset)
 end
 
-function GameBoard:turn(i)
+function GameBoard:droppingIn()
+
     if self.tile then
-        self.tile:turn(i)
+        local a = self.delta * 6;
+        if a > 1 then
+            a = 1;
+            self.delta = 0
+            self.state = STATE__RUNNING
+        end
+        self.tile:setAlpha(a)
+        self.tile:draw()
     end 
+end
+
+function GameBoard:running()
+
+    if self.tile then
+        self.tile:draw()
+    end 
+
+    if self.tile then
+        local newtile = false
+        if self.delta >= self.tempo then
+            self.delta = self.delta - self.tempo
+            newtile = self.tile:descend()
+        end
+
+        if newtile then
+            self:clearLines()
+            self:dropIn()
+        else 
+            self.tile:setPhase(self.delta / self.tempo)
+        end
+    end
+end
+
+---------------------
+---------------------
+---------------------
+
+function GameBoard:turn()
+    if self.tile then
+        self.tile:turn()
+    end 
+end
+
+function GameBoard:move(i, multiple)
+    if self.tile then
+        self.tile:move(i, multiple)
+    end 
+end
+
+function GameBoard:dropIn()
+    local li = -1
+    if self.tile then
+        li = self.tile.tileIndex
+    end
+
+    local i = love.math.random(1, 8)
+    if i == li or i == 8 then
+        i = love.math.random(1, 7)
+    end
+
+    self.tile = Tile.create(self.tileSets, self.blocks, self.board, i)
+    self.tile:setAlpha(0.0)
+    self.tile:setPhase(0)
+    self.delta = 0
+    self.state = STATE__DROPPING_IN
+end
+
+function GameBoard:clearLines()
+    local y = 23
+    while(y >= 0) do
+        local i = 0
+        for x=0, 9 do
+            if self.board[y][x] > 0 then
+                i = i + 1
+            end
+        end
+        if i >= 10 then
+            for yy=y, 1, -1 do
+                for x=0, 9 do
+                    self.board[yy][x] = self.board[yy-1][x]
+                end
+            end
+            for x=0, 9 do
+                self.board[0][x] = 0
+            end
+            y = y + 1
+        end
+         
+        y = y - 1
+    end
+end
+
+function GameBoard:test()
+    self:dropIn()
 end
