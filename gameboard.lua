@@ -77,7 +77,16 @@ function Tile:turn()
     end 
 end
 
-function Tile:descend()
+function Tile:descend(drop)
+
+    if drop then
+        local y = self.yPos + 1
+        while self:check(self.turnIndex, self.xPos, y) do
+            self.yPos = y
+            y = y + 1
+        end
+    end
+
     if self:check(self.turnIndex, self.xPos, self.yPos + 1) then
         self.yPos = self.yPos + 1
         return false
@@ -148,6 +157,8 @@ end
 
 STATE__RUNNING = 1
 STATE__DROPPING_IN = 2
+STATE__CLEARING_FADE_OUT = 3
+STATE__CLEARING_COLLAPSE = 4
 
 GameBoard = {}
 GameBoard.__index = GameBoard
@@ -193,10 +204,22 @@ function GameBoard.create()
     self.tempo = 0.15
     self.delta = 0
 
+    -- the clearing phases
+    self.clearingPhase = 1
+
+    -- keyboard 
+    self.f1Down = false
+    self.upDown = false
+    self.leftDown = false
+    self.rightDown = false
+    self.dropDown = false
+
     -- the board
     self.board = {}
+    self.completedLines = {}
     for y=0, 23 do
         self.board[y] = {}
+        self.completedLines[y] = false
         for x=0, 9 do
             self.board[y][x] = 0
         end
@@ -206,16 +229,33 @@ function GameBoard.create()
 end
 
 function GameBoard:draw()
+
+    love.graphics.setColor(1, 1, 1, 1)
     love.graphics.draw(self.background, 0, 0)
 
     love.graphics.translate(self.xOffset, self.yOffset)
 
-    love.graphics.setColor(1, 1, 1, 1)
-    for y=0, 23 do
-        for x=0, 9 do
-            local i = self.board[y][x]
-            if i > 0 then
-                love.graphics.draw(self.blocks[i], x * self.blockSize, y * self.blockSize)
+    local clearedcount = 0
+    for y=23, 0, -1 do
+        local drawline = true
+        if self.state == STATE__CLEARING_FADE_OUT and self.completedLines[y] then
+            love.graphics.setColor(1, 1, 1, self.clearingPhase)
+        elseif self.state == STATE__CLEARING_COLLAPSE then
+            if self.completedLines[y] then
+                drawline = false
+                clearedcount = clearedcount + 1
+            end
+            love.graphics.setColor(1, 1, 1, 1)
+        else
+            love.graphics.setColor(1, 1, 1, 1)
+        end
+        if drawline then
+            collapseoffset = clearedcount * self.clearingPhase * self.blockSize
+            for x=0, 9 do
+                local i = self.board[y][x]
+                if i > 0 then
+                    love.graphics.draw(self.blocks[i], x * self.blockSize, (y * self.blockSize) + collapseoffset)
+                end
             end
         end
     end
@@ -226,9 +266,60 @@ function GameBoard:draw()
         self:running()
     elseif self.state == STATE__DROPPING_IN  then
         self:droppingIn()
+    elseif self.state == STATE__CLEARING_FADE_OUT  then
+        self:clearingFadeOut()
+    elseif self.state == STATE__CLEARING_COLLAPSE  then
+        self:clearingCollapse()
     end
 
     love.graphics.translate(-self.xOffset, -self.yOffset)
+
+    -----------------------------------------------
+
+    if love.keyboard.isDown("f1") then
+        if not self.f1Down then
+            self:test()
+        end
+        self.f1Down = true
+    else
+        self.f1Down = false
+    end
+
+    if love.keyboard.isDown("up") then
+        if not self.upDown then
+            self:turn()
+        end
+        self.upDown = true
+    else
+        self.upDown = false
+    end
+
+    if love.keyboard.isDown("left") then
+        if not self.leftDown then
+            self:move(-1, love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
+        end
+        self.leftDown = true
+    else
+        self.leftDown = false
+    end
+
+    if love.keyboard.isDown("right") then
+        if not self.rightDown then
+            self:move(1, love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
+        end
+        self.rightDown = true
+    else
+        self.rightDown = false
+    end
+
+    if love.keyboard.isDown("space") then
+        if not self.dropDown then
+            self:drop()
+        end
+        self.dropDown = true
+    else
+        self.dropDown = false
+    end
 end
 
 function GameBoard:droppingIn()
@@ -245,6 +336,29 @@ function GameBoard:droppingIn()
     end 
 end
 
+function GameBoard:clearingCollapse()
+    
+    local a = self.delta * 12;
+    if a > 1 then
+        self:clearLines(false)
+        self:dropIn()
+    else 
+        self.clearingPhase = a
+    end
+end
+
+function GameBoard:clearingFadeOut()
+    
+    local a = self.delta * 12;
+    if a > 1 then
+        self.delta = 0
+        self.clearingPhase = 0
+        self.state = STATE__CLEARING_COLLAPSE
+    else 
+        self.clearingPhase = 1 - a
+    end
+end
+
 function GameBoard:running()
 
     if self.tile then
@@ -252,17 +366,22 @@ function GameBoard:running()
     end 
 
     if self.tile then
+
+        local tempo = self.tempo
+        if love.keyboard.isDown("down") then
+            tempo = 0.06
+        end
+
         local newtile = false
-        if self.delta >= self.tempo then
-            self.delta = self.delta - self.tempo
+        if self.delta >= tempo then
+            self.delta = self.delta - tempo
             newtile = self.tile:descend()
         end
 
         if newtile then
-            self:clearLines()
-            self:dropIn()
+            self:checkLines()
         else 
-            self.tile:setPhase(self.delta / self.tempo)
+            self.tile:setPhase(self.delta / tempo)
         end
     end
 end
@@ -272,18 +391,29 @@ end
 ---------------------
 
 function GameBoard:turn()
+
     if self.tile then
         self.tile:turn()
     end 
 end
 
 function GameBoard:move(i, multiple)
+
     if self.tile then
         self.tile:move(i, multiple)
     end 
 end
 
+function GameBoard:drop()
+
+    if self.tile then
+        self.tile:descend(true)
+        self:checkLines()
+    end 
+end
+
 function GameBoard:dropIn()
+
     local li = -1
     if self.tile then
         li = self.tile.tileIndex
@@ -301,9 +431,24 @@ function GameBoard:dropIn()
     self.state = STATE__DROPPING_IN
 end
 
-function GameBoard:clearLines()
+function GameBoard:checkLines()
+
+    if self:clearLines(true) then
+        self.tile = nil
+        self.delta = 0
+        self.clearingPhase = 1
+        self.state = STATE__CLEARING_FADE_OUT
+    else
+        self:dropIn()
+    end
+end
+
+function GameBoard:clearLines(markonly)
+
+    local clearedlines = false    
     local y = 23
-    while(y >= 0) do
+    while y >= 0 do
+        self.completedLines[y] = false
         local i = 0
         for x=0, 9 do
             if self.board[y][x] > 0 then
@@ -311,21 +456,28 @@ function GameBoard:clearLines()
             end
         end
         if i >= 10 then
-            for yy=y, 1, -1 do
-                for x=0, 9 do
-                    self.board[yy][x] = self.board[yy-1][x]
+            clearedlines = true
+            if markonly then
+                self.completedLines[y] = true
+            else
+                for yy=y, 1, -1 do
+                    for x=0, 9 do
+                        self.board[yy][x] = self.board[yy-1][x]
+                    end
                 end
+                for x=0, 9 do
+                    self.board[0][x] = 0
+                end
+                y = y + 1
             end
-            for x=0, 9 do
-                self.board[0][x] = 0
-            end
-            y = y + 1
         end
          
         y = y - 1
     end
+    return clearedlines
 end
 
 function GameBoard:test()
+
     self:dropIn()
 end
