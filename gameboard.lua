@@ -71,9 +71,15 @@ function Tile:draw()
     end
 end
 
-function Tile:turn()
-    if self:check((self.turnIndex + 1) % 4, self.xPos, self.yPos) then
-        self.turnIndex = (self.turnIndex + 1) % 4
+function Tile:rotate(counterclockwise)
+    local inc
+    if counterclockwise then
+        inc = 3
+    else
+        inc = 1
+    end
+    if self:check((self.turnIndex + inc) % 4, self.xPos, self.yPos) then
+        self.turnIndex = (self.turnIndex + inc) % 4
     end 
 end
 
@@ -155,6 +161,7 @@ end
 -- GameBoard
 --
 
+STATE__TITLE = 0
 STATE__RUNNING = 1
 STATE__DROPPING_IN = 2
 STATE__CLEARING_FADE_OUT = 3
@@ -168,10 +175,24 @@ function GameBoard.create()
 
     -- the background
     self.background = love.graphics.newImage("assets/board.png")
+    self.logo = love.graphics.newImage("assets/tetris.png")
+    self.space = love.graphics.newImage("assets/space.png")
+    self.keySpace = love.graphics.newImage("assets/key_space.png")
+    self.keyLeft = love.graphics.newImage("assets/key_left.png")
+    self.keyLeftCtrl = love.graphics.newImage("assets/key_leftctrl.png")
+    self.keyRight = love.graphics.newImage("assets/key_right.png")
+    self.keyRightCtrl = love.graphics.newImage("assets/key_rightctrl.png")
+    self.keyUp = love.graphics.newImage("assets/key_up.png")
+    self.keyUpCtrl = love.graphics.newImage("assets/key_upctrl.png")
+    self.keyDown = love.graphics.newImage("assets/key_down.png")
+    self.keySpace = love.graphics.newImage("assets/key_space.png")
+    self.keyEsc = love.graphics.newImage("assets/key_esc.png")
     self.width = self.background:getWidth()
     self.height = self.background:getHeight()
     self.xOffset = 21
     self.yOffset = 22
+    self.font1 = love.graphics.newFont("assets/Kenney Rocket.ttf", 16)
+    self.font2 = love.graphics.newFont("assets/Kenney Mini.ttf", 16)
 
     -- the blocks
     self.blocks = {}
@@ -195,7 +216,7 @@ function GameBoard.create()
     self.tileSets[7] = loadTileSet("assets/tile7.txt") 
 
     -- the current statte
-    self.state = STATE__RUNNING
+    self.state = STATE__TITLE
 
     -- the current tile
     self.tile = nil
@@ -233,93 +254,201 @@ function GameBoard:draw()
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.draw(self.background, 0, 0)
 
-    love.graphics.translate(self.xOffset, self.yOffset)
+    if self.state == STATE__TITLE then
+        local x = math.floor((self.width - self.logo:getWidth()) / 2)
+        local y = math.floor((self.height - self.logo:getHeight()) / 10)
+        love.graphics.draw(self.logo, x, y)
+        y = y + self.logo:getHeight() + 30
 
-    local clearedcount = 0
-    for y=23, 0, -1 do
-        local drawline = true
-        if self.state == STATE__CLEARING_FADE_OUT and self.completedLines[y] then
-            love.graphics.setColor(1, 1, 1, self.clearingPhase)
-        elseif self.state == STATE__CLEARING_COLLAPSE then
-            if self.completedLines[y] then
-                drawline = false
-                clearedcount = clearedcount + 1
+        y = self:drawCentered({self:text1("Press "), self.space, self:text1(" to Start")}, y, 237, 211, 7) + 60
+
+        x = self:getCenteredX({self.keyUpCtrl, self:text2("   Rotate Backwards")})
+        y = self:drawAbsolute({self.keyLeft, self:text2("   Move Left")}, x, y, 70, 183, 236) + 10
+        y = self:drawAbsolute({self.keyLeftCtrl, self:text2("   Move Full Left")}, x, y, 70, 183, 236) + 10
+        y = self:drawAbsolute({self.keyRight, self:text2("   Move Right")}, x, y, 70, 183, 236) + 10
+        y = self:drawAbsolute({self.keyRightCtrl, self:text2("   Move Full Right")}, x, y, 70, 183, 236) + 10
+        y = self:drawAbsolute({self.keyUp, self:text2("   Rotate")}, x, y, 70, 183, 236) + 10
+        y = self:drawAbsolute({self.keyUpCtrl, self:text2("   Rotate Backwards")}, x, y, 70, 183, 236) + 10
+        y = self:drawAbsolute({self.keyDown, self:text2("   Soft Drop")}, x, y, 70, 183, 236) + 10
+        y = self:drawAbsolute({self.keySpace, self:text2("   Hard Drop")}, x, y, 70, 183, 236) + 10
+        y = self:drawAbsolute({self.keyEsc, self:text2("   Quit")}, x, y, 70, 183, 236) + 10
+
+        if love.keyboard.isDown("space") then
+            if not self.dropDown then
+                self:dropIn()
             end
-            love.graphics.setColor(1, 1, 1, 1)
+            self.dropDown = true
         else
-            love.graphics.setColor(1, 1, 1, 1)
-        end
-        if drawline then
-            collapseoffset = clearedcount * self.clearingPhase * self.blockSize
-            for x=0, 9 do
-                local i = self.board[y][x]
-                if i > 0 then
-                    love.graphics.draw(self.blocks[i], x * self.blockSize, (y * self.blockSize) + collapseoffset)
+            self.dropDown = false
+        end     
+    else 
+        love.graphics.translate(self.xOffset, self.yOffset)
+
+        local clearedcount = 0
+        for y=23, 0, -1 do
+            local drawline = true
+            if self.state == STATE__CLEARING_FADE_OUT and self.completedLines[y] then
+                love.graphics.setColor(1, 1, 1, self.clearingPhase)
+            elseif self.state == STATE__CLEARING_COLLAPSE then
+                if self.completedLines[y] then
+                    drawline = false
+                    clearedcount = clearedcount + 1
+                end
+                love.graphics.setColor(1, 1, 1, 1)
+            else
+                love.graphics.setColor(1, 1, 1, 1)
+            end
+            if drawline then
+                collapseoffset = clearedcount * self.clearingPhase * self.blockSize
+                for x=0, 9 do
+                    local i = self.board[y][x]
+                    if i > 0 then
+                        love.graphics.draw(self.blocks[i], x * self.blockSize, (y * self.blockSize) + collapseoffset)
+                    end
                 end
             end
         end
-    end
 
-    self.delta = self.delta + love.timer.getDelta()
+        self.delta = self.delta + love.timer.getDelta()
 
-    if self.state == STATE__RUNNING  then
-        self:running()
-    elseif self.state == STATE__DROPPING_IN  then
-        self:droppingIn()
-    elseif self.state == STATE__CLEARING_FADE_OUT  then
-        self:clearingFadeOut()
-    elseif self.state == STATE__CLEARING_COLLAPSE  then
-        self:clearingCollapse()
-    end
-
-    love.graphics.translate(-self.xOffset, -self.yOffset)
-
-    -----------------------------------------------
-
-    if love.keyboard.isDown("f1") then
-        if not self.f1Down then
-            self:test()
+        if self.state == STATE__RUNNING  then
+            self:running()
+        elseif self.state == STATE__DROPPING_IN  then
+            self:droppingIn()
+        elseif self.state == STATE__CLEARING_FADE_OUT  then
+            self:clearingFadeOut()
+        elseif self.state == STATE__CLEARING_COLLAPSE  then
+            self:clearingCollapse()
         end
-        self.f1Down = true
-    else
-        self.f1Down = false
+
+        love.graphics.translate(-self.xOffset, -self.yOffset)
+
+        -----------------------------------------------
+
+        if love.keyboard.isDown("f1") then
+            if not self.f1Down then
+                self:test()
+            end
+            self.f1Down = true
+        else
+            self.f1Down = false
+        end
+
+        if love.keyboard.isDown("up") then
+            if not self.upDown then
+                self:rotate(love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
+            end
+            self.upDown = true
+        else
+            self.upDown = false
+        end
+
+        if love.keyboard.isDown("left") then
+            if not self.leftDown then
+                self:move(-1, love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
+            end
+            self.leftDown = true
+        else
+            self.leftDown = false
+        end
+
+        if love.keyboard.isDown("right") then
+            if not self.rightDown then
+                self:move(1, love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
+            end
+            self.rightDown = true
+        else
+            self.rightDown = false
+        end
+
+        if love.keyboard.isDown("space") then
+            if not self.dropDown then
+                self:drop()
+            end
+            self.dropDown = true
+        else
+            self.dropDown = false
+        end
+    end
+end
+
+function GameBoard:text1(str) 
+    return love.graphics.newText(self.font1, str)
+end
+
+function GameBoard:text2(str) 
+    return love.graphics.newText(self.font2, str)
+end
+
+function GameBoard:getCenteredX(drawables)
+    
+    local totalwitdh = 0
+    local i = 1
+    while drawables[i] do
+        totalwitdh = totalwitdh + drawables[i]:getWidth()
+        i = i + 1;
     end
 
-    if love.keyboard.isDown("up") then
-        if not self.upDown then
-            self:turn()
+    return math.floor((self.width - totalwitdh) / 2)
+end
+
+function GameBoard:drawCentered(drawables, y, r, g, b)
+    
+    local totalwitdh = 0
+    local maxheight = 0
+    local i = 1
+    while drawables[i] do
+        totalwitdh = totalwitdh + drawables[i]:getWidth()
+        if drawables[i]:getHeight() > maxheight then
+            maxheight = drawables[i]:getHeight()
         end
-        self.upDown = true
-    else
-        self.upDown = false
+        i = i + 1;
     end
 
-    if love.keyboard.isDown("left") then
-        if not self.leftDown then
-            self:move(-1, love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
+    local x = math.floor((self.width - totalwitdh) / 2)
+    local yy = y + math.floor(maxheight / 2)
+    
+    local i = 1
+    while drawables[i] do
+        if drawables[i]:typeOf("Text") then
+            setRGB(r, g, b)
+        else 
+            love.graphics.setColor(1, 1, 1, 1)
         end
-        self.leftDown = true
-    else
-        self.leftDown = false
+
+        love.graphics.draw(drawables[i], x, yy - math.floor(drawables[i]:getHeight() / 2))
+        x = x + drawables[i]:getWidth()
+        i = i + 1;
+    end
+    return y + maxheight
+end
+
+function GameBoard:drawAbsolute(drawables, x, y, r, g, b)
+    
+    local maxheight = 0
+    local i = 1
+    while drawables[i] do
+        if drawables[i]:getHeight() > maxheight then
+            maxheight = drawables[i]:getHeight()
+        end
+        i = i + 1;
     end
 
-    if love.keyboard.isDown("right") then
-        if not self.rightDown then
-            self:move(1, love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
+    local yy = y + math.floor(maxheight / 2)
+    
+    local i = 1
+    while drawables[i] do
+        if drawables[i]:typeOf("Text") then
+            setRGB(r, g, b)
+        else 
+            love.graphics.setColor(1, 1, 1, 1)
         end
-        self.rightDown = true
-    else
-        self.rightDown = false
-    end
 
-    if love.keyboard.isDown("space") then
-        if not self.dropDown then
-            self:drop()
-        end
-        self.dropDown = true
-    else
-        self.dropDown = false
+        love.graphics.draw(drawables[i], x, yy - math.floor(drawables[i]:getHeight() / 2))
+        x = x + drawables[i]:getWidth()
+        i = i + 1;
     end
+    return y + maxheight
 end
 
 function GameBoard:droppingIn()
@@ -390,10 +519,10 @@ end
 ---------------------
 ---------------------
 
-function GameBoard:turn()
+function GameBoard:rotate(counterclockwise)
 
     if self.tile then
-        self.tile:turn()
+        self.tile:rotate(counterclockwise)
     end 
 end
 

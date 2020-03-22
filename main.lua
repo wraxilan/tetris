@@ -18,8 +18,7 @@ function love.load()
     board = GameBoard.create()
     boardX = math.floor((love.graphics.getWidth() - board.width) / 2)
     boardY = math.floor((love.graphics.getHeight() - board.height) / 2)
-    -- font = love.graphics.newFont("assets/azonix.otf", 18)
-    font = love.graphics.newFont("assets/NineteenNinetySeven-11XB.ttf", 18)
+    font = love.graphics.newFont("assets/Kenney Mini.ttf", 18)
    
 end
 
