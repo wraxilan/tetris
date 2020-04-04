@@ -1,3 +1,6 @@
+
+require("util")
+
 --
 -- Helper functions
 --
@@ -157,6 +160,49 @@ function Tile:getAlpha()
     return self.alpha
 end
 
+function Tile:getPreviewWidth()
+    local w = 0
+    for x=0, 3 do
+        local ww = 0
+        for y=0, 3 do
+            local i = self.tileset[self.tileIndex][self.turnIndex][y][x]
+            if i > 0 then
+                ww = self.blockSize
+            end
+        end
+        w = w + ww
+    end
+    return w
+end
+
+function Tile:getPreviewHeight()
+    local h = 0
+    for y=0, 3 do
+        local hh = 0
+        for x=0, 3 do
+            local i = self.tileset[self.tileIndex][self.turnIndex][y][x]
+            if i > 0 then
+                hh = self.blockSize
+            end
+        end
+        h = h + hh
+    end
+    return h
+end
+
+function Tile:drawPreview(alpha)
+
+    love.graphics.setColor(1, 1, 1, alpha)
+    for y=0, 3 do
+        for x=0, 3 do
+            local i = self.tileset[self.tileIndex][4][y][x]
+            if i > 0 then
+                love.graphics.draw(self.blocks[i], x * self.blockSize, y * self.blockSize)
+            end
+        end
+    end
+end
+
 --
 -- GameBoard
 --
@@ -170,8 +216,11 @@ STATE__CLEARING_COLLAPSE = 4
 GameBoard = {}
 GameBoard.__index = GameBoard
 
-function GameBoard.create()
+function GameBoard.create(nextboard)
     local self = setmetatable({}, GameBoard)
+
+    -- the other boards
+    self.nextBoard = nextboard
 
     -- the background
     self.background = love.graphics.newImage("assets/board.png")
@@ -221,6 +270,9 @@ function GameBoard.create()
     -- the current tile
     self.tile = nil
 
+    -- the next tile
+    self.nextTile = nil
+
     -- tempo in s
     self.tempo = 0.15
     self.delta = 0
@@ -260,22 +312,22 @@ function GameBoard:draw()
         love.graphics.draw(self.logo, x, y)
         y = y + self.logo:getHeight() + 30
 
-        y = self:drawCentered({self:text1("Press "), self.space, self:text1(" to Start")}, y, 237, 211, 7) + 60
+        y = drawCentered(self.width, {newText(self.font1, "Press "), self.space, newText(self.font1, " to Start")}, y, 237, 211, 7) + 60
 
-        x = self:getCenteredX({self.keyUpCtrl, self:text2("   Rotate Backwards")})
-        y = self:drawAbsolute({self.keyLeft, self:text2("   Move Left")}, x, y, 70, 183, 236) + 10
-        y = self:drawAbsolute({self.keyLeftCtrl, self:text2("   Move Full Left")}, x, y, 70, 183, 236) + 10
-        y = self:drawAbsolute({self.keyRight, self:text2("   Move Right")}, x, y, 70, 183, 236) + 10
-        y = self:drawAbsolute({self.keyRightCtrl, self:text2("   Move Full Right")}, x, y, 70, 183, 236) + 10
-        y = self:drawAbsolute({self.keyUp, self:text2("   Rotate")}, x, y, 70, 183, 236) + 10
-        y = self:drawAbsolute({self.keyUpCtrl, self:text2("   Rotate Backwards")}, x, y, 70, 183, 236) + 10
-        y = self:drawAbsolute({self.keyDown, self:text2("   Soft Drop")}, x, y, 70, 183, 236) + 10
-        y = self:drawAbsolute({self.keySpace, self:text2("   Hard Drop")}, x, y, 70, 183, 236) + 10
-        y = self:drawAbsolute({self.keyEsc, self:text2("   Quit")}, x, y, 70, 183, 236) + 10
+        x = getCenteredX(self.width, {self.keyUpCtrl, newText(self.font2, "   Rotate Backwards")})
+        y = drawAbsolute({self.keyLeft, newText(self.font2, "   Move Left")}, x, y, 70, 183, 236) + 10
+        y = drawAbsolute({self.keyLeftCtrl, newText(self.font2, "   Move Full Left")}, x, y, 70, 183, 236) + 10
+        y = drawAbsolute({self.keyRight, newText(self.font2, "   Move Right")}, x, y, 70, 183, 236) + 10
+        y = drawAbsolute({self.keyRightCtrl, newText(self.font2, "   Move Full Right")}, x, y, 70, 183, 236) + 10
+        y = drawAbsolute({self.keyUp, newText(self.font2, "   Rotate")}, x, y, 70, 183, 236) + 10
+        y = drawAbsolute({self.keyUpCtrl, newText(self.font2, "   Rotate Backwards")}, x, y, 70, 183, 236) + 10
+        y = drawAbsolute({self.keyDown, newText(self.font2, "   Soft Drop")}, x, y, 70, 183, 236) + 10
+        y = drawAbsolute({self.keySpace, newText(self.font2, "   Hard Drop")}, x, y, 70, 183, 236) + 10
+        y = drawAbsolute({self.keyEsc, newText(self.font2, "   Quit")}, x, y, 70, 183, 236) + 10
 
         if love.keyboard.isDown("space") then
             if not self.dropDown then
-                self:dropIn()
+                self:start()
             end
             self.dropDown = true
         else
@@ -372,85 +424,6 @@ function GameBoard:draw()
     end
 end
 
-function GameBoard:text1(str) 
-    return love.graphics.newText(self.font1, str)
-end
-
-function GameBoard:text2(str) 
-    return love.graphics.newText(self.font2, str)
-end
-
-function GameBoard:getCenteredX(drawables)
-    
-    local totalwitdh = 0
-    local i = 1
-    while drawables[i] do
-        totalwitdh = totalwitdh + drawables[i]:getWidth()
-        i = i + 1;
-    end
-
-    return math.floor((self.width - totalwitdh) / 2)
-end
-
-function GameBoard:drawCentered(drawables, y, r, g, b)
-    
-    local totalwitdh = 0
-    local maxheight = 0
-    local i = 1
-    while drawables[i] do
-        totalwitdh = totalwitdh + drawables[i]:getWidth()
-        if drawables[i]:getHeight() > maxheight then
-            maxheight = drawables[i]:getHeight()
-        end
-        i = i + 1;
-    end
-
-    local x = math.floor((self.width - totalwitdh) / 2)
-    local yy = y + math.floor(maxheight / 2)
-    
-    local i = 1
-    while drawables[i] do
-        if drawables[i]:typeOf("Text") then
-            setRGB(r, g, b)
-        else 
-            love.graphics.setColor(1, 1, 1, 1)
-        end
-
-        love.graphics.draw(drawables[i], x, yy - math.floor(drawables[i]:getHeight() / 2))
-        x = x + drawables[i]:getWidth()
-        i = i + 1;
-    end
-    return y + maxheight
-end
-
-function GameBoard:drawAbsolute(drawables, x, y, r, g, b)
-    
-    local maxheight = 0
-    local i = 1
-    while drawables[i] do
-        if drawables[i]:getHeight() > maxheight then
-            maxheight = drawables[i]:getHeight()
-        end
-        i = i + 1;
-    end
-
-    local yy = y + math.floor(maxheight / 2)
-    
-    local i = 1
-    while drawables[i] do
-        if drawables[i]:typeOf("Text") then
-            setRGB(r, g, b)
-        else 
-            love.graphics.setColor(1, 1, 1, 1)
-        end
-
-        love.graphics.draw(drawables[i], x, yy - math.floor(drawables[i]:getHeight() / 2))
-        x = x + drawables[i]:getWidth()
-        i = i + 1;
-    end
-    return y + maxheight
-end
-
 function GameBoard:droppingIn()
 
     if self.tile then
@@ -460,6 +433,7 @@ function GameBoard:droppingIn()
             self.delta = 0
             self.state = STATE__RUNNING
         end
+        self.nextBoard:setFadeInAlpha(a)
         self.tile:setAlpha(a)
         self.tile:draw()
     end 
@@ -541,21 +515,32 @@ function GameBoard:drop()
     end 
 end
 
-function GameBoard:dropIn()
-
-    local li = -1
-    if self.tile then
-        li = self.tile.tileIndex
-    end
+function GameBoard:start()
 
     local i = love.math.random(1, 8)
     if i == li or i == 8 then
         i = love.math.random(1, 7)
     end
 
-    self.tile = Tile.create(self.tileSets, self.blocks, self.board, i)
+    self.nextTile = Tile.create(self.tileSets, self.blocks, self.board, i)
+    self:dropIn()
+end
+
+function GameBoard:dropIn()
+
+    self.tile = self.nextTile;
     self.tile:setAlpha(0.0)
     self.tile:setPhase(0)
+
+    local i = love.math.random(1, 8)
+    if i == self.tile.tileIndex or i == 8 then
+        i = love.math.random(1, 7)
+    end
+
+    self.nextTile = Tile.create(self.tileSets, self.blocks, self.board, i)
+    self.nextBoard:setTile(self.nextTile)
+    self.nextBoard:setFadeInAlpha(0.0)
+
     self.delta = 0
     self.state = STATE__DROPPING_IN
 end
